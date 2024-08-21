@@ -52,30 +52,35 @@ class AuthController extends Controller
 
     public function login(LoginRequest $request)
     {
-        //Extrae los datos unicamnete solo de los campos email y password
         $credentials = $request->only('email', 'password');
-
-        //Busca al usario en la base de datos por su email
         $user = User::where('email', $request->email)->first();
 
-        //verifica si encontro el usario con ese email de lo contrario retorna una respuesta json
         if (!$user) {
             return response()->json(['error' => 'Usuario no encontrado'], 404);
         }
 
-        //condicional para autenticar al usario con las credenciales
-        //en caso de que la credencial sea incorrecta retorna una respuesta json
         if (!$token = JWTAuth::attempt($credentials)) {
             return response()->json(['error' => 'La contraseña es incorrecta'], 400);
         }
 
-        //verifica si el requirePasswordChange esta en true o false y retorna un el token
+        // Obtén el ID del rol asociado al usuario
+        $roleId = $user->role_id;
+
         if ($user->password_change_required) {
-            return response()->json(['requirePasswordChange' => true, 'token' => $token], 200);
+            return response()->json([
+                'requirePasswordChange' => true,
+                'token' => $token,
+                'role' => $roleId
+            ], 200);
         }
-        //si todo esta en falso reotna un json con el token y que no sebe cambiarse la contraseña
-        return response()->json(['token' => $token, 'requirePasswordChange' => false]);
+
+        return response()->json([
+            'token' => $token,
+            'requirePasswordChange' => false,
+            'role' => $roleId
+        ]);
     }
+
 
     public function changePassword(Request $request)
     {
@@ -107,7 +112,16 @@ class AuthController extends Controller
 
     public function obtenerUsuario(Request $request)
     {
-        return response()->json($request->user());
+        try {
+            $user = $request->user()->load('rol');
+
+            return response()->json([
+                'name' => $user->name,
+                'role' => $user->rol ? $user->rol->descripcion : 'Sin rol',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Error al obtener usuario', 'message' => $e->getMessage()], 500);
+        }
     }
 
     public function validateToken(Request $request)
@@ -117,6 +131,20 @@ class AuthController extends Controller
             return response()->json(['valid' => true], 200);
         } catch (JWTException $e) {
             return response()->json(['valid' => false], 401);
+        }
+    }
+
+    public function serrarSesion(Request $request)
+    {
+        try {
+            // Invalida el token del usuario autenticado
+            JWTAuth::invalidate(JWTAuth::parseToken());
+
+            // Retorna un mensaje de éxito
+            return response()->json(['message' => 'Sesión cerrada exitosamente'], 200);
+        } catch (JWTException $e) {
+            // Manejo de errores en caso de que el token no pueda ser invalidado
+            return response()->json(['error' => 'No se pudo cerrar la sesión, intente nuevamente'], 500);
         }
     }
 }
