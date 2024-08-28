@@ -8,8 +8,10 @@ use App\Models\Cuota\Cuota;
 use App\Models\Matricula\Matricula;
 use App\Models\Persona\Persona;
 use App\Models\PadreFamilia\PadreFamilia;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Hash;
 
 class PersonaController extends Controller
 {
@@ -29,6 +31,7 @@ class PersonaController extends Controller
             'pais' => 'required|min:3|max:50',
             'provincia' => 'min:3|max:100',
             'distrito' => 'min:3|max:100',
+            'email' => 'required|email|unique:users',
 
             // Datos del padre
             'nombre_padre' => 'required|min:2|max:50',
@@ -47,7 +50,6 @@ class PersonaController extends Controller
             'fecha_nacimiento_madre' => 'required|date',
 
             // Datos adicionales
-            // 'id_grado' => 'required|exists:grado,id',
             'id_grado' => 'required',
             'situacion' => 'required',
             'costo_matricula' => 'required|numeric',
@@ -58,6 +60,28 @@ class PersonaController extends Controller
             return response()->json($validator->errors(), 400);
         }
 
+        // Generar la contraseña automática solo para el estudiante
+        $dni = $request->dni;
+        $fechaNacimiento = $request->fecha_nacimiento;
+        $dia = date('d', strtotime($fechaNacimiento)); // Obtén el día del mes
+
+        // Obtén las primeras dos letras del nombre y los apellidos
+        $primeraLetraNombre = strtoupper(substr($request->nombre, 0, 1));  // Primera letra del nombre
+        $primerosDosLetrasAP = strtoupper(substr($request->ap_paterno, 0, 2));
+        $primerosDosLetrasAM = strtoupper(substr($request->ap_materno, 0, 2));
+        $UltimosDosNumeroDNI = substr($dni, -2);
+
+        $password = $dia . $primeraLetraNombre . $primerosDosLetrasAP . $primerosDosLetrasAM . $UltimosDosNumeroDNI;
+
+        // Crear el usuario en la tabla users solo para el estudiante
+        $user = new User([
+            'name' => $request->nombre,
+            'email' => $request->email,
+            'password' => Hash::make($password),
+            'role_id' => 2,
+        ]);
+        $user->save();
+
         // Registrar los datos del estudiante
         $datosEstudiante = new Persona([
             'nombre' => $request->nombre,
@@ -67,6 +91,7 @@ class PersonaController extends Controller
             'direccion' => $request->direccion,
             'telefono' => $request->telefono,
             'fecha_nacimiento' => $request->fecha_nacimiento,
+            'email' => $request->email
         ]);
         $datosEstudiante->save();
 
@@ -87,7 +112,6 @@ class PersonaController extends Controller
             'id_grado' => $request->id_grado,
             'anio' => date('Y'),
             'id_periodo_academico' => 1, // Asigna el periodo académico si es necesario
-            'id_cuota' => 1, // Asigna la cuota si es necesario
             'situacion' => $request->situacion,
         ]);
         $matricula->save();
@@ -110,6 +134,9 @@ class PersonaController extends Controller
             // Rellenar las demás cuotas si es necesario
         ]);
         $cuotas->save();
+
+        $matricula->id_cuota = $cuotas->id;
+        $matricula->save();
 
         // Registrar los datos del padre
         $padre = new Persona([

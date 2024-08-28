@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Alumno\AlumnoController;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Docente\DocenteController;
 use App\Http\Controllers\Grado\GradoController;
 use App\Http\Controllers\PadreFamilia\PadreFamiliaController;
 use App\Http\Controllers\Persona\PersonaController;
@@ -23,6 +24,9 @@ Route::get('/consulta-dni/{dni}', [ReniecConsultasController::class, 'consultasD
 Route::middleware(['jwt-verify'])->group(function () {
     Route::get('/users', [AuthController::class, 'obtenerUsuario']);
     Route::post('/datos-estudiante', [PersonaController::class, 'registarDatosPersona']);
+    Route::post('/registrar-docente', [DocenteController::class, 'registrarDatosDocente']);
+
+
     Route::post('/logout', [AuthController::class, 'serrarSesion']);
     Route::get('/lista-grado', [GradoController::class, 'obtnerGrado']);
 });
