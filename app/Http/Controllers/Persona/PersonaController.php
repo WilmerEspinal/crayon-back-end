@@ -27,10 +27,10 @@ class PersonaController extends Controller
             'direccion' => 'min:4|max:150',
             'telefono' => 'min:9|max:9',
             'fecha_nacimiento' => 'required|date',
-            'departamento' => 'min:2|max:50',
+            'departamento' => 'required',
             'pais' => 'required|min:3|max:50',
-            'provincia' => 'min:3|max:100',
-            'distrito' => 'min:3|max:100',
+            'provincia' => 'required',
+            'distrito' => 'required',
             'email' => 'required|email|unique:users',
 
             // Datos del padre
@@ -40,6 +40,7 @@ class PersonaController extends Controller
             'direccion_padre' => 'min:4|max:150',
             'telefono_padre' => 'min:9|max:9',
             'fecha_nacimiento_padre' => 'required|date',
+            'relacion_padre' => "required",
 
             // Datos de la madre
             'nombre_madre' => 'required|min:2|max:50',
@@ -48,6 +49,7 @@ class PersonaController extends Controller
             'direccion_madre' => 'min:4|max:150',
             'telefono_madre' => 'min:9|max:9',
             'fecha_nacimiento_madre' => 'required|date',
+            'relacion_madre' => 'required',
 
             // Datos adicionales
             'id_grado' => 'required',
@@ -73,14 +75,7 @@ class PersonaController extends Controller
 
         $password = $dia . $primeraLetraNombre . $primerosDosLetrasAP . $primerosDosLetrasAM . $UltimosDosNumeroDNI;
 
-        // Crear el usuario en la tabla users solo para el estudiante
-        $user = new User([
-            'name' => $request->nombre,
-            'email' => $request->email,
-            'password' => Hash::make($password),
-            'role_id' => 2,
-        ]);
-        $user->save();
+
 
         // Registrar los datos del estudiante
         $datosEstudiante = new Persona([
@@ -147,6 +142,7 @@ class PersonaController extends Controller
             'direccion' => $request->direccion_padre,
             'telefono' => $request->telefono_padre,
             'fecha_nacimiento' => $request->fecha_nacimiento_padre,
+            'relacion' => $request->relacion_padre,
         ]);
         $padre->save();
 
@@ -154,8 +150,9 @@ class PersonaController extends Controller
         $padreFamiliaPadre = new PadreFamilia([
             'id_persona' => $padre->id,
             'id_alumno' => $alumno->id,
-            'relacion' => 'Padre',
+            'relacion' => $request->relacion_padre,
         ]);
+
         $padreFamiliaPadre->save();
 
         // Registrar los datos de la madre
@@ -167,6 +164,7 @@ class PersonaController extends Controller
             'direccion' => $request->direccion_madre,
             'telefono' => $request->telefono_madre,
             'fecha_nacimiento' => $request->fecha_nacimiento_madre,
+            'relacion' => $request->relacion_madre,
         ]);
         $madre->save();
 
@@ -174,9 +172,21 @@ class PersonaController extends Controller
         $padreFamiliaMadre = new PadreFamilia([
             'id_persona' => $madre->id,
             'id_alumno' => $alumno->id,
-            'relacion' => 'Madre',
+            'relacion' => $request->relacion_madre,
         ]);
         $padreFamiliaMadre->save();
+
+
+        // Crear el usuario en la tabla users solo para el estudiante
+        $user = new User([
+            'name' => $request->nombre,
+            'email' => $request->email,
+            'password' => Hash::make($password),
+            'role_id' => 2,
+            'id_persona' => $datosEstudiante->id,
+
+        ]);
+        $user->save();
 
         return response()->json([
             'estudiante' => $datosEstudiante,

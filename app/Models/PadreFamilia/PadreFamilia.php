@@ -18,4 +18,9 @@ class PadreFamilia extends Model
         'created_at',
         'updated_at',
     ];
+
+    public function persona()
+    {
+        return $this->belongsTo(Persona::class, 'id_persona');
+    }
 }

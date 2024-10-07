@@ -4,6 +4,8 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 
+use App\Models\Alumno\Alumno;
+use App\Models\Persona\Persona;
 use App\Models\Rol\Rol;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -24,7 +26,8 @@ class User extends Authenticatable implements JWTSubject
         'email',
         'password',
         "role_id",
-        'password_change_require'
+        'password_change_require',
+        "id_persona",
     ];
 
     /**
@@ -62,5 +65,16 @@ class User extends Authenticatable implements JWTSubject
     public function rol()
     {
         return $this->belongsTo(Rol::class, 'role_id');
+    }
+
+
+    public function persona()
+    {
+        return $this->belongsTo(Persona::class, 'id_persona', 'id');
+    }
+
+    public function alumno()
+    {
+        return $this->hasOne(Alumno::class, 'id_persona', 'id');
     }
 }

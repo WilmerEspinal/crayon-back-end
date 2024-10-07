@@ -5,8 +5,10 @@ namespace App\Models\Matricula;
 use App\Models\Alumno\Alumno;
 use App\Models\Cuota\Cuota;
 use App\Models\Grado\Grado;
+use App\Models\Persona\Persona;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User;
 
 class Matricula extends Model
 {
@@ -37,6 +39,16 @@ class Matricula extends Model
     // Relación con el modelo Cuota
     public function cuota()
     {
-        return $this->hasOne(Cuota::class, 'id_matricula');
+        return $this->hasMany(Cuota::class, 'id_matricula', 'id');
+    }
+
+    public function persona()
+    {
+        return $this->belongsTo(Persona::class, 'id_persona', 'id'); // Ajusta según tu estructura
+    }
+
+    public function user()
+    {
+        return $this->hasOne(User::class, 'id_persona', 'id');
     }
 }

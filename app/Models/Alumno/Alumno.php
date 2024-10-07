@@ -2,8 +2,10 @@
 
 namespace App\Models\Alumno;
 
+use App\Models\Cuota\Cuota;
 use App\Models\Grado\Grado;
 use App\Models\Matricula\Matricula;
+use App\Models\PadreFamilia\PadreFamilia;
 use App\Models\Persona\Persona;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -33,6 +35,8 @@ class Alumno extends Model
         return $this->belongsTo(Persona::class, 'id_persona');
     }
 
+
+
     // Relación con el modelo Grado
     public function grado()
     {
@@ -41,6 +45,16 @@ class Alumno extends Model
 
     public function matriculas()
     {
-        return $this->hasMany(Matricula::class, 'id_alumno');
+        return $this->hasOne(Matricula::class, 'id_alumno', 'id');
+    }
+
+
+    public function cuotas()
+    {
+        return $this->hasManyThrough(Cuota::class, Matricula::class);
+    }
+    public function familia()
+    {
+        return $this->hasMany(PadreFamilia::class, 'id_alumno');
     }
 }
