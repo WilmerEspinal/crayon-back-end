@@ -33,6 +33,7 @@ class AsistenciaController extends Controller
         $request->validate([
             'asistencias.*.id_alumno' => 'required|exists:alumno,id',
             'asistencias.*.fecha' => 'required|date',
+            'asistencias.*.id_curso' => 'required|exists:curso,id',
             'asistencias.*.estado_asistencia' => 'required|boolean',
         ]);
 
@@ -43,6 +44,7 @@ class AsistenciaController extends Controller
                 [
                     'id_alumno' => $asistencia['id_alumno'],
                     'fecha' => $asistencia['fecha'],
+                    'id_curso' => $asistencia['id_curso'],
                 ],
                 [
                     'estado_asistencia' => $asistencia['estado_asistencia'],

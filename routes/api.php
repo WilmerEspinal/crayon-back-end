@@ -65,13 +65,19 @@ Route::middleware(['jwt-verify'])->group(function () {
 
 
     Route::get('/cuotas-detalle/{id_grado}/lista', [PagoController::class, 'cuotaDetalles']);
+    Route::post('/pagar/{cuotaNumero}', [PagoController::class, 'pagarCuota']);
+
+    Route::post('/pagar-matricula', [PagoController::class, 'pagarMatricula']);
 });
 
 
-Route::post('/pagar/{id}/{cuotaNumero}', [PagoController::class, 'pagarCuota']);
-Route::post('/webhook/mercado-pago', [PagoController::class, 'notificacionPagos']);
+// Route::post('/pagar/{id}/{cuotaNumero}', [PagoController::class, 'pagarCuota']);
+Route::post('/recibir-pago', [PagoController::class, 'notificacionPagos']);
 Route::get('/payment-success/{id}/{cuotaEstado}', [PagoController::class, 'paymentSuccess']);
 Route::get('/payment-failure', [PagoController::class, 'paymentFailure']);
+Route::get('/payment-success-matricula/{id}', [PagoController::class, 'paymentSuccessMatricula']);
+Route::post('/webhook/mercado-pago/matricula', [PagoController::class, 'notificacionPagosMatricula']);
+Route::get('/payment-realizado-matricula/{id}', [PagoController::class, 'pagoRealizadoMatricula']);
 
 
 

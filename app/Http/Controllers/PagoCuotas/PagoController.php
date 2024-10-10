@@ -3,7 +3,11 @@
 namespace App\Http\Controllers\PagoCuotas;
 
 use App\Http\Controllers\Controller;
+use App\Models\Alumno\Alumno;
 use App\Models\Cuota\Cuota; // Asegúrate de que la ruta del modelo sea correcta
+use App\Models\Matricula\Matricula;
+use App\Models\Persona\Persona;
+use Exception;
 use Illuminate\Http\Request;
 use MercadoPago\SDK;
 use MercadoPago\Preference;
@@ -20,16 +24,43 @@ use function Pest\Laravel\json;
 
 class PagoController extends Controller
 {
-    public function pagarCuota(Request $request, $id, $cuotaNumero)
+    public function pagarCuota(Request $request, $cuotaNumero)
     {
+        // Autenticación del usuario
+        $user = JWTAuth::parseToken()->authenticate();
 
+        // Obtener la persona asociada al usuario autenticado
+        $persona = Persona::where('id', $user->id_persona)->first();
+
+        if (!$persona) {
+            return response()->json(['message' => 'No se encontró una persona asociada al usuario.'], 404);
+        }
+
+        // Obtener el alumno asociado a la persona
+        $alumno = Alumno::where('id_persona', $persona->id)->first();
+
+        if (!$alumno) {
+            return response()->json(['message' => 'No se encontró un alumno asociado a la persona.'], 404);
+        }
+
+        // Buscar la matrícula del alumno
+        $matricula = Matricula::where('id_alumno', $alumno->id)->first();
+
+        if (!$matricula) {
+            return response()->json(['message' => 'No se encontró una matrícula para el alumno.'], 404);
+        }
+
+        // Buscar la cuota asociada a la matrícula
+        $cuota = Cuota::where('id_matricula', $matricula->id)->first();
+
+        if (!$cuota) {
+            return response()->json(['message' => 'No se encontraron cuotas para la matrícula.'], 404);
+        }
+
+        // Validación del número de cuota
         if ($cuotaNumero < 1 || $cuotaNumero > 10) {
             return response()->json(['message' => 'Número de cuota no válido.'], 400);
         }
-
-
-        $cuota = Cuota::with('matricula.alumno.persona')->findOrFail($id);
-
 
         $cuotaAPagar = $cuota->{"cuota_$cuotaNumero"};
         $cuotaEstado = "c{$cuotaNumero}_estado";
@@ -38,13 +69,11 @@ class PagoController extends Controller
             return response()->json(['message' => 'La cuota especificada ya está pagada o no existe.'], 400);
         }
 
-
-        $emailPersona = $cuota->matricula->alumno->persona->email ?? null;
+        $emailPersona = $persona->email ?? null;
 
         if (!$emailPersona) {
-            return response()->json(['message' => 'No se encontró un usuario asociado a esta cuota.'], 400);
+            return response()->json(['message' => 'No se encontró un correo electrónico asociado a esta persona.'], 400);
         }
-
 
         \MercadoPago\SDK::setAccessToken(env('MERCADOPAGO_ACCESS_TOKEN'));
 
@@ -56,17 +85,15 @@ class PagoController extends Controller
         $item->unit_price = (float)$cuotaAPagar;
         $preference->items = [$item];
 
-
         $payer = new Payer();
         $payer->email = $emailPersona;
 
         $preference->payer = $payer;
 
-
-        $preference->external_reference = $id;
+        $preference->external_reference = $cuota->id;
 
         $preference->back_urls = [
-            "success" => url("/api/payment-success/$id/$cuotaEstado"),
+            "success" => url("/api/payment-success/{$cuota->id}/$cuotaEstado"),
             "failure" => url("/api/payment-failure"),
             "pending" => url("/api/payment-pending"),
         ];
@@ -79,6 +106,43 @@ class PagoController extends Controller
     }
 
 
+
+
+    public function pagoRealizado(Request $request, $id, $cuotaEstado)
+    {
+        \MercadoPago\SDK::setAccessToken(env('MERCADOPAGO_ACCESS_TOKEN'));
+
+        $payment_id = $request->query('payment_id');
+
+        if (!$payment_id) {
+            return response()->json(['message' => 'ID de pago no proporcionado.'], 400);
+        }
+
+        try {
+            $payment = Payment::find_by_id($payment_id);
+
+            if ($payment && $payment->status == 'approved') {
+                $cuota = Cuota::findOrFail($id);
+                $cuota->{$cuotaEstado} = true;
+
+
+                $cuota->{"cuota_" . substr($cuotaEstado, 1, 1)} = 0;
+
+                $cuota->save();
+
+                return response()->json(['message' => 'Pago realizado con éxito.']);
+            } else {
+                return response()->json(['message' => 'El pago no fue aprobado o no se encontró.'], 400);
+            }
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Error al verificar el pago: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function notificacionPagos(Request $request)
+    {
+        Log::info(json_encode($request->all()));
+    }
 
 
 
@@ -118,78 +182,6 @@ class PagoController extends Controller
         }
     }
 
-
-    public function pagarMatricula(Request $request) {}
-
-    public function pagoRealizado(Request $request, $id, $cuotaEstado)
-    {
-        \MercadoPago\SDK::setAccessToken(env('MERCADOPAGO_ACCESS_TOKEN'));
-
-        $payment_id = $request->query('payment_id');
-
-        if (!$payment_id) {
-            return response()->json(['message' => 'ID de pago no proporcionado.'], 400);
-        }
-
-        try {
-            $payment = Payment::find_by_id($payment_id);
-
-            if ($payment && $payment->status == 'approved') {
-                $cuota = Cuota::findOrFail($id);
-                $cuota->{$cuotaEstado} = true;
-
-
-                $cuota->{"cuota_" . substr($cuotaEstado, 1, 1)} = 0;
-
-                $cuota->save();
-
-                return response()->json(['message' => 'Pago realizado con éxito.']);
-            } else {
-                return response()->json(['message' => 'El pago no fue aprobado o no se encontró.'], 400);
-            }
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Error al verificar el pago: ' . $e->getMessage()], 500);
-        }
-    }
-
-    public function notificacionPagos(Request $request)
-    {
-        // Obtener el ID del pago de la notificación
-        $paymentId = $request->input('data.id');
-        $paymentStatus = $request->input('data.status');
-        $amount = $request->input('data.transaction_amount');
-
-
-        $payment = Payment::find_by_id($paymentId);
-
-        if ($payment && $payment->status === 'approved') {
-            $cuotaId = $payment->external_reference;
-
-
-            $cuota = Cuota::findOrFail($cuotaId);
-
-
-            $cuotaNumero = null;
-            foreach (range(1, 10) as $numero) {
-                if ($cuota->{"cuota_$numero"} == $amount) {
-                    $cuotaNumero = $numero;
-                    break;
-                }
-            }
-
-            if ($cuotaNumero !== null) {
-
-                $cuotaEstado = "c{$cuotaNumero}_estado";
-                $cuota->{$cuotaEstado} = true;
-                $cuota->{"cuota_$cuotaNumero"} = 0;
-                $cuota->save();
-            }
-        }
-
-
-        return response()->json(['status' => 'success']);
-    }
-
     public function pagoFallido()
     {
         return response()->json(['message' => 'El pago ha fallado.']);
@@ -199,13 +191,6 @@ class PagoController extends Controller
     {
         return response()->json(['message' => 'El pago está pendiente.']);
     }
-
-
-
-
-
-
-
 
 
 
@@ -274,16 +259,6 @@ class PagoController extends Controller
         // Devolver las cuotas no pagadas asociadas al alumno en formato JSON
         return response()->json($cuotasNoPagadas);
     }
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -426,5 +401,200 @@ class PagoController extends Controller
 
 
         return response()->json($resultado);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    public function pagarMatricula(Request $request)
+    {
+        // Autenticación del usuario
+        $user = JWTAuth::parseToken()->authenticate();
+
+        // Obtener la persona asociada al usuario autenticado
+        $persona = Persona::where('id', $user->id_persona)->first();
+
+        if (!$persona) {
+            return response()->json(['message' => 'No se encontró una persona asociada al usuario.'], 404);
+        }
+
+        // Obtener el alumno asociado a la persona
+        $alumno = Alumno::where('id_persona', $persona->id)->first();
+
+        if (!$alumno) {
+            return response()->json(['message' => 'No se encontró un alumno asociado a la persona.'], 404);
+        }
+
+        // Buscar la matrícula del alumno
+        $matricula = Matricula::where('id_alumno', $alumno->id)->first();
+
+        if (!$matricula) {
+            return response()->json(['message' => 'No se encontró una matrícula para el alumno.'], 404);
+        }
+
+        // Obtener la cuota asociada a la matrícula
+        $cuota = Cuota::where('id_matricula', $matricula->id)->first();
+
+        if (!$cuota) {
+            return response()->json(['message' => 'No se encontraron cuotas para la matrícula.'], 404);
+        }
+
+        // Verificar el estado de matrícula
+        if ($cuota->matricula_estado == 1) {
+            return response()->json(['message' => 'La matrícula ya está pagada.'], 400);
+        }
+
+        $emailPersona = $persona->email ?? null;
+
+        if (!$emailPersona) {
+            return response()->json(['message' => 'No se encontró un correo electrónico asociado a esta persona.'], 400);
+        }
+
+        \MercadoPago\SDK::setAccessToken(env('MERCADOPAGO_ACCESS_TOKEN'));
+
+        $preference = new Preference();
+
+        $item = new Item();
+        $item->title = "Pago de matrícula";
+        $item->quantity = 1;
+        $item->unit_price = (float)$cuota->costo_matricula; // Precio de la matrícula
+        $preference->items = [$item];
+
+        $payer = new Payer();
+        $payer->email = $emailPersona;
+
+        $preference->payer = $payer;
+
+        $preference->external_reference = $cuota->id; // Puedes usar el ID de la cuota o matrícula
+
+        $preference->back_urls = [
+            "success" => url("/api/payment-realizado-matricula/{$matricula->id}"),
+            "failure" => url("/api/payment-failure"),
+            "pending" => url("/api/payment-pending"),
+        ];
+
+        $preference->auto_return = "approved";
+
+        $preference->save();
+
+        return response()->json(['init_point' => $preference->init_point]);
+    }
+
+    public function pagoRealizadoMatricula(Request $request, $id)
+    {
+        \MercadoPago\SDK::setAccessToken(env('MERCADOPAGO_ACCESS_TOKEN'));
+
+        // Obtener el ID del pago desde la consulta
+        $payment_id = $request->query('payment_id');
+
+        if (!$payment_id) {
+            return response()->json(['message' => 'ID de pago no proporcionado.'], 400);
+        }
+
+        try {
+            // Buscar el pago por su ID
+            $payment = Payment::find_by_id($payment_id);
+
+            if ($payment && $payment->status == 'approved') {
+                // Obtener la cuota usando el ID proporcionado
+                $cuota = Cuota::where('id_matricula', $id)->first();
+
+                if ($cuota) {
+                    // Verificar si el estado ya está pagado
+                    if ($cuota->matricula_estado == 1) {
+                        return response()->json(['message' => 'La matrícula ya está pagada.'], 400);
+                    }
+
+                    // Actualizar el estado de la matrícula
+                    $cuota->matricula_estado = 1; // Marcar como pagada
+
+                    // Vaciar el costo de la matrícula
+                    $cuota->costo_matricula = 0.00; // Cambiar a 0
+
+                    // Guardar los cambios en la base de datos
+                    $cuota->save();
+
+                    return response()->json(['message' => 'Pago de matrícula realizado con éxito.']);
+                } else {
+                    return response()->json(['message' => 'Cuota no encontrada.'], 404);
+                }
+            } else {
+                return response()->json(['message' => 'El pago no fue aprobado o no se encontró.'], 400);
+            }
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Error al verificar el pago: ' . $e->getMessage()], 500);
+        }
+    }
+
+
+
+
+
+
+    public function paymentSuccessMatricula($idMatricula)
+    {
+        // Verificar que el ID de matrícula sea válido
+        if (!is_numeric($idMatricula)) {
+            return response()->json(['message' => 'ID de matrícula no válido.'], 400);
+        }
+
+        // Obtener la cuota usando el ID recibido
+        $cuota = Cuota::where('id_matricula', $idMatricula)->first();
+
+        if (!$cuota) {
+            return response()->json(['message' => 'Cuota no encontrada.'], 404);
+        }
+
+        // Verificar el estado de la matrícula
+        if ($cuota->matricula_estado == 1) {
+            return response()->json(['message' => 'La matrícula ya está pagada.'], 400);
+        }
+
+        // Actualizar el estado de la matrícula a pagada
+        $cuota->matricula_estado = 1; // Marcar como pagada
+        $cuota->save();
+
+        return response()->json(['message' => 'Pago procesado exitosamente.']);
+    }
+
+
+
+    public function notificacionPagosMatricula(Request $request)
+    {
+        // Obtener el estado de la notificación
+        $notificationData = $request->all();
+
+        // Puedes validar el estado del pago aquí
+        // Por ejemplo, verificar si el estado es "approved"
+        $paymentId = $notificationData['data']['id'];
+        $paymentStatus = $notificationData['data']['status'];
+
+        // Realiza la lógica necesaria según el estado del pago
+        if ($paymentStatus === 'approved') {
+            // Buscar el ID de la matrícula a través del ID del pago o referencia
+            $matriculaId = $notificationData['data']['external_reference'];
+            $matricula = Matricula::find($matriculaId);
+
+            if ($matricula) {
+                // Actualizar el estado de la matrícula
+                $matricula->matricula_estado = 1; // Marcar como pagada
+                $matricula->save();
+            }
+        }
+
+        // Retornar una respuesta adecuada
+        return response()->json(['message' => 'Notificación recibida correctamente.']);
     }
 }
